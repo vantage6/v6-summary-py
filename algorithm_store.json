@@ -1,0 +1,43 @@
+{
+  "name": "v6-summary-py",
+  "image": "harbor2.vantage6.ai/algorithms/v6-summary-py",
+  "vantage6_version": "4.3",
+  "partitioning": "horizontal",
+  "functions": [
+    {
+      "name": "summary",
+      "description": "Create a summary of the data (mean, range, variance, length, ...)",
+      "type": "central",
+      "databases": [],
+      "arguments": [
+        {
+          "name": "columns",
+          "type": "",
+          "description": ""
+        },
+        {
+          "name": "organizations_to_include",
+          "type": "",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "summary_per_data_station",
+      "description": "",
+      "type": "federated",
+      "databases": [
+        {
+          "name": "Database 1"
+        }
+      ],
+      "arguments": [
+        {
+          "name": "columns",
+          "type": "",
+          "description": ""
+        }
+      ]
+    }
+  ]
+}
