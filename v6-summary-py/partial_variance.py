@@ -9,17 +9,11 @@ or directly to the user (if they requested partial results).
 
 import pandas as pd
 
-from vantage6.algorithm.tools.util import info, warn, error, get_env_var
+from vantage6.algorithm.tools.util import info, error, get_env_var
 from vantage6.algorithm.tools.decorators import data
-from vantage6.algorithm.tools.exceptions import PrivacyThresholdViolation, InputError
-from .globals import (
-    DEFAULT_MINIMUM_ROWS,
-    DEFAULT_PRIVACY_THRESHOLD,
-    ENVVAR_ALLOWED_COLUMNS,
-    ENVVAR_DISALLOWED_COLUMNS,
-    ENVVAR_MINIMUM_ROWS,
-    ENVVAR_PRIVACY_THRESHOLD,
-)
+from vantage6.algorithm.tools.exceptions import InputError
+from .utils import check_privacy, cast_df_to_numeric
+from .globals import EnvVarsAllowed
 
 
 @data(1)
@@ -44,6 +38,11 @@ def variance_per_data_station(
     dict
         Contains the variance of the numeric columns
     """
+    if not get_env_var(
+        EnvVarsAllowed.ALLOW_VARIANCE.value, default="true", as_type="bool"
+    ):
+        error("Node policies do not allow sharing the variance.")
+        return None
     # Check that columnn names exist in the dataframe - note that this check should
     # not be necessary if a user runs the central task as is has already been checked
     # in that case
@@ -57,75 +56,26 @@ def variance_per_data_station(
             "Length of columns list does not match the length of means list"
         )
 
-    # filter dataframe to only include the columns of interest
+    # Filter dataframe to only include the columns of interest
     df = df[columns]
 
-    # TODO generalize this function as it is also used in the other task
     # Check privacy settings
-    min_length_df = get_env_var(
-        ENVVAR_MINIMUM_ROWS, default=DEFAULT_MINIMUM_ROWS, as_type="int"
-    )
     info("Checking if data complies to privacy settings")
-    _check_privacy(df, min_length_df, columns)
+    check_privacy(df, columns)
 
+    # Cast the columns to numeric
+    try:
+        cast_df_to_numeric(df, columns)
+    except ValueError as exc:
+        error(str(exc))
+        error("Exiting algorithm...")
+        return None
+
+    # Calculate the variance
     info("Calculating variance")
     variances = {}
-    print(columns)
-    print(means)
-    for idx in range(len(columns)):
-        column = columns[idx]
+    for idx, column in enumerate(columns):
         mean = means[idx]
-        variances[column] = ((df[column] - mean) ** 2).sum()
+        variances[column] = ((df[column].astype(float) - mean) ** 2).sum()
 
     return variances
-
-
-def _check_privacy(
-    df: pd.DataFrame, min_rows: int, requested_columns: list[str]
-) -> None:
-    """
-    Check if the data complies with the privacy settings
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The data to check
-    min_rows : int
-        The minimum length of the data frame
-    requested_columns : list[str]
-        The columns that are requested in the computation
-    """
-    if len(df) < min_rows:
-        raise PrivacyThresholdViolation(
-            f"Data contains less than {min_rows} rows. Refusing to "
-            "handle this computation, as it may lead to privacy issues."
-        )
-    # check that each column has at least min_rows non-null values
-    for col in df.columns:
-        if df[col].count() < min_rows:
-            raise PrivacyThresholdViolation(
-                f"Column {col} contains less than {min_rows} non-null values. "
-                "Refusing to handle this computation, as it may lead to privacy issues."
-            )
-
-    # Check if requested columns are allowed
-    allowed_columns = get_env_var(ENVVAR_ALLOWED_COLUMNS)
-    if allowed_columns:
-        allowed_columns = allowed_columns.split(",")
-        for col in requested_columns:
-            if col not in allowed_columns:
-                raise ValueError(
-                    f"The node administrator does not allow '{col}' to be requested in "
-                    "this algorithm computation. Please contact the node administrator "
-                    "for more information."
-                )
-    non_allowed_collumns = get_env_var(ENVVAR_DISALLOWED_COLUMNS)
-    if non_allowed_collumns:
-        non_allowed_collumns = non_allowed_collumns.split(",")
-        for col in requested_columns:
-            if col in non_allowed_collumns:
-                raise ValueError(
-                    f"The node administrator does not allow '{col}' to be requested in "
-                    "this algorithm computation. Please contact the node administrator "
-                    "for more information."
-                )

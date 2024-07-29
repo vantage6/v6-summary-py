@@ -8,7 +8,7 @@ encryption if that is enabled).
 
 from typing import Any
 
-from vantage6.algorithm.tools.util import info, warn, error
+from vantage6.algorithm.tools.util import info
 from vantage6.algorithm.tools.decorators import algorithm_client
 from vantage6.algorithm.tools.exceptions import AlgorithmExecutionError, InputError
 from vantage6.algorithm.client import AlgorithmClient
@@ -94,7 +94,9 @@ def summary(
         description="Compute variance per data station",
     )
     variance_results = client.wait_for_results(task_id=task.get("id"))
-    print(variance_results)
+
+    # add the standard deviation to the results
+    results = _add_sd_to_results(results, variance_results, numerical_columns)
 
     # return the final results of the algorithm
     return results
@@ -168,3 +170,31 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
         aggregated_dict["mean"] = aggregated_dict["sum"] / aggregated_dict["count"]
 
     return aggregated_summary
+
+
+def _add_sd_to_results(
+    results: dict, variance_results: list[dict], numerical_columns: list[str]
+) -> dict:
+    """Add the variance to the results.
+
+    Parameters
+    ----------
+    results : dict
+        The results of the summary task.
+    variance_results : list[dict]
+        The variance results of all nodes.
+    numerical_columns : list[str]
+        The numerical columns.
+
+    Returns
+    -------
+    dict
+        The results with the variance added.
+    """
+    for column in numerical_columns:
+        sum_variance = 0
+        for node_results in variance_results:
+            sum_variance += node_results[column]
+        variance = sum_variance / (results["numeric"][column]["count"] - 1)
+        results["numeric"][column]["std"] = variance**0.5
+    return results

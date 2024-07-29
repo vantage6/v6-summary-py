@@ -9,17 +9,15 @@ or directly to the user (if they requested partial results).
 
 import pandas as pd
 
-from vantage6.algorithm.tools.util import info, warn, error, get_env_var
+from vantage6.algorithm.tools.util import info, warn, get_env_var
 from vantage6.algorithm.tools.decorators import data
-from vantage6.algorithm.tools.exceptions import PrivacyThresholdViolation, InputError
+from vantage6.algorithm.tools.exceptions import InputError
 from .globals import (
-    DEFAULT_MINIMUM_ROWS,
     DEFAULT_PRIVACY_THRESHOLD,
-    ENVVAR_ALLOWED_COLUMNS,
-    ENVVAR_DISALLOWED_COLUMNS,
-    ENVVAR_MINIMUM_ROWS,
     ENVVAR_PRIVACY_THRESHOLD,
+    EnvVarsAllowed,
 )
+from .utils import check_privacy, check_match_inferred_is_numeric
 
 
 @data(1)
@@ -56,21 +54,16 @@ def summary_per_data_station(
     # filter dataframe to only include the columns of interest
     df = df[columns]
 
-    # Get privacy settings from environment variables
-    min_length_df = get_env_var(
-        ENVVAR_MINIMUM_ROWS, default=DEFAULT_MINIMUM_ROWS, as_type="int"
-    )
-
     # Check privacy settings
     info("Checking if data complies to privacy settings")
-    _check_privacy(df, min_length_df, columns)
+    check_privacy(df, columns)
 
     # Split the data in numeric and non-numeric columns
     inferred_is_numeric = [df[col].dtype in [int, float] for col in df.columns]
     if is_numeric is None:
         is_numeric = inferred_is_numeric
     else:
-        df = _check_match_inferred_is_numeric(
+        df = check_match_inferred_is_numeric(
             is_numeric, inferred_is_numeric, columns, df
         )
 
@@ -97,123 +90,34 @@ def summary_per_data_station(
 
     # count complete rows without missing values
     num_complete_rows_per_node = len(df.dropna())
+
+    # filter out the variables that are not allowed to be shared
+    summary_numeric, summary_categorical = _filter_results(
+        summary_numeric, summary_categorical
+    )
+    if not get_env_var(
+        EnvVarsAllowed.ALLOW_NUM_COMPLETE_ROWS.value, default="true", as_type="bool"
+    ):
+        warn(
+            "Removing number of complete rows from summary as policies do not "
+            "allow sharing it."
+        )
+        num_complete_rows_per_node = None
+    if not get_env_var(
+        EnvVarsAllowed.ALLOW_COUNTS_UNIQUE_VALUES.value, default="true", as_type="bool"
+    ):
+        warn(
+            "Removing counts of unique values from summary as policies do not "
+            "allow sharing it."
+        )
+        counts_unique_values = None
+
     return {
         "numeric": summary_numeric.to_dict(),
         "categorical": summary_categorical.to_dict(),
         "num_complete_rows_per_node": num_complete_rows_per_node,
         "counts_unique_values": counts_unique_values,
     }
-
-
-def _check_privacy(
-    df: pd.DataFrame, min_rows: int, requested_columns: list[str]
-) -> None:
-    """
-    Check if the data complies with the privacy settings
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The data to check
-    min_rows : int
-        The minimum length of the data frame
-    requested_columns : list[str]
-        The columns that are requested in the computation
-    """
-    if len(df) < min_rows:
-        raise PrivacyThresholdViolation(
-            f"Data contains less than {min_rows} rows. Refusing to "
-            "handle this computation, as it may lead to privacy issues."
-        )
-    # check that each column has at least min_rows non-null values
-    for col in df.columns:
-        if df[col].count() < min_rows:
-            raise PrivacyThresholdViolation(
-                f"Column {col} contains less than {min_rows} non-null values. "
-                "Refusing to handle this computation, as it may lead to privacy issues."
-            )
-
-    # Check if requested columns are allowed
-    allowed_columns = get_env_var(ENVVAR_ALLOWED_COLUMNS)
-    if allowed_columns:
-        allowed_columns = allowed_columns.split(",")
-        for col in requested_columns:
-            if col not in allowed_columns:
-                raise ValueError(
-                    f"The node administrator does not allow '{col}' to be requested in "
-                    "this algorithm computation. Please contact the node administrator "
-                    "for more information."
-                )
-    non_allowed_collumns = get_env_var(ENVVAR_DISALLOWED_COLUMNS)
-    if non_allowed_collumns:
-        non_allowed_collumns = non_allowed_collumns.split(",")
-        for col in requested_columns:
-            if col in non_allowed_collumns:
-                raise ValueError(
-                    f"The node administrator does not allow '{col}' to be requested in "
-                    "this algorithm computation. Please contact the node administrator "
-                    "for more information."
-                )
-
-
-def _check_match_inferred_is_numeric(
-    is_numeric: list[bool],
-    inferred_is_numeric: list[bool],
-    columns: list[str],
-    df: pd.DataFrame,
-):
-    """
-    Check if the provided is_numeric list matches the inferred is_numeric list
-
-    Parameters
-    ----------
-    is_numeric : list[bool]
-        The provided is_numeric list
-    inferred_is_numeric : list[bool]
-        The inferred is_numeric list
-    columns : list[str]
-        The columns for which the is_numeric list is provided
-    df: pd.DataFrame
-        The original data. The type of the data may be modified if possible
-    """
-    if len(is_numeric) != len(columns):
-        raise ValueError(
-            "Length of is_numeric list does not match the length of columns list"
-        )
-    if not all(
-        [is_numeric[i] == inferred_is_numeric[i] for i in range(len(is_numeric))]
-    ):
-        # check which columns do not match
-        wrongly_numeric_columns = [
-            columns[i]
-            for i in range(len(columns))
-            if is_numeric[i] and not inferred_is_numeric[i]
-        ]
-        wrongly_non_numeric_columns = [
-            columns[i]
-            for i in range(len(columns))
-            if not is_numeric[i] and inferred_is_numeric[i]
-        ]
-        # TODO there still needs to be a try to cast the columns to numeric
-        msg = ""
-        if wrongly_numeric_columns:
-            # try to cast the columns to numeric
-            try:
-                for col in wrongly_numeric_columns:
-                    df[col] = pd.to_numeric(df[col])
-            except ValueError:
-                msg += (
-                    f"Columns {wrongly_numeric_columns} are not numeric, but is_numeric"
-                    " is set to True\n"
-                )
-        if wrongly_non_numeric_columns:
-            msg += (
-                f"Columns {wrongly_non_numeric_columns} are numeric, but is_numeric is "
-                "set to False"
-            )
-        if msg:
-            raise ValueError(msg)
-    return df
 
 
 def _get_numeric_summary(df: pd.DataFrame) -> pd.DataFrame:
@@ -306,3 +210,43 @@ def _mask_privacy(counts: pd.Series, privacy_threshold: int, column: str) -> dic
         )
         return {}
     return counts.to_dict()
+
+
+def _filter_results(
+    summary_numeric: pd.DataFrame, summary_categorical: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Filter out the variables that are not allowed to be shared
+
+    Parameters
+    ----------
+    summary_numeric : pd.DataFrame
+        The summary statistics for the numeric columns
+    summary_categorical : pd.DataFrame
+        The summary statistics for the non-numeric columns
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        The filtered summary statistics for the numeric and non-numeric columns
+    """
+    if not get_env_var(EnvVarsAllowed.ALLOW_MIN.value, default="true", as_type="bool"):
+        warn("Removing minimum from summary as policies do not allow sharing it.")
+        summary_numeric.drop("min", inplace=True)
+    if not get_env_var(EnvVarsAllowed.ALLOW_MAX.value, default="true", as_type="bool"):
+        warn("Removing maximum from summary as policies do not allow sharing it.")
+        summary_numeric.drop("max", inplace=True)
+    if not get_env_var(
+        EnvVarsAllowed.ALLOW_COUNT.value, default="true", as_type="bool"
+    ):
+        warn("Removing count from summary as policies do not allow sharing it.")
+        summary_numeric.drop("count", inplace=True)
+    if not get_env_var(EnvVarsAllowed.ALLOW_SUM.value, default="true", as_type="bool"):
+        warn("Removing sum from summary as policies do not allow sharing it.")
+        summary_numeric.drop("sum", inplace=True)
+    if not get_env_var(
+        EnvVarsAllowed.ALLOW_MISSING.value, default="true", as_type="bool"
+    ):
+        warn("Removing missing from summary as policies do not allow sharing it.")
+        summary_numeric.drop("missing", inplace=True)
+    return summary_numeric, summary_categorical

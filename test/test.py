@@ -13,7 +13,6 @@ installed. This can be done by running:
 """
 
 import os
-import copy
 import pytest
 import pandas as pd
 import numpy as np
@@ -72,6 +71,18 @@ organizations = client.organization.list()
 org_ids = [organization["id"] for organization in organizations]
 
 
+central_task = client.task.create(
+    input_={
+        "method": "summary",
+        "kwargs": {
+            "columns": columns,
+        },
+    },
+    organizations=[org_ids[0]],
+)
+results = client.wait_for_results(central_task.get("id"))
+
+
 def test_central_all_columns():
     """test central method on all columns"""
     central_task = client.task.create(
@@ -105,6 +116,12 @@ def test_central_all_columns():
     assert numeric_results["A"]["sum"] == data["A"].sum()
     assert numeric_results["B"]["sum"] == data["B"].sum()
     assert numeric_results["C"]["sum"] == data["C"].sum()
+    assert numeric_results["A"]["mean"] == data["A"].mean()
+    assert numeric_results["B"]["mean"] == data["B"].mean()
+    assert numeric_results["C"]["mean"] == data["C"].mean()
+    assert numeric_results["A"]["std"] == data["A"].std()
+    assert numeric_results["B"]["std"] == data["B"].std()
+    assert numeric_results["C"]["std"] == data["C"].std()
     categorical_results = results[0]["categorical"]
     assert categorical_results["D"]["count"] == data["D"].count()
     assert categorical_results["E"]["count"] == data["E"].count()
