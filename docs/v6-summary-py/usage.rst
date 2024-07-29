@@ -5,7 +5,7 @@ Input arguments
 ---------------
 
 .. list-table::
-   :widths: 20 80
+   :widths: 20 20 60
    :header-rows: 1
 
    * - Argument
