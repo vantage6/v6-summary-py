@@ -1,5 +1,5 @@
-Overview
-========
+Summary algorithm
+=================
 
 Description
 -----------
