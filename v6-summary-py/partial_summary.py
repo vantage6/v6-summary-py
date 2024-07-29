@@ -22,7 +22,9 @@ from .utils import check_privacy, check_match_inferred_is_numeric
 
 @data(1)
 def summary_per_data_station(
-    df: pd.DataFrame, columns: list[str], is_numeric: list[bool] | None = None
+    df: pd.DataFrame,
+    columns: list[str] | None = None,
+    is_numeric: list[bool] | None = None,
 ) -> dict:
     """
     Compuate the summary statistics for a single data station to share with the
@@ -32,8 +34,9 @@ def summary_per_data_station(
     ----------
     df : pd.DataFrame
         The data for the data station
-    columns : list[str]
-        The columns to compute the summary statistics for
+    columns : list[str] | None
+        The columns to compute the summary statistics for. If not provided, all columns
+        are included.
     is_numeric : list[bool]
         Whether the columns are numeric or not. For non-numeric columns, other summary
         statistics are computed. If not provided, it will be inferred.
@@ -44,6 +47,9 @@ def summary_per_data_station(
         The summary statistics for the data station. If the summary statistics cannot
         be computed, None is returned
     """
+    if not columns:
+        columns = df.columns
+
     # Check that columnn names exist in the dataframe
     if not all([col in df.columns for col in columns]):
         non_existing_columns = [col for col in columns if col not in df.columns]

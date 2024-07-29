@@ -27,5 +27,5 @@ class EnvVarsAllowed(Enum):
 
 
 # default values for environment variables
-DEFAULT_MINIMUM_ROWS = 10
+DEFAULT_MINIMUM_ROWS = 5
 DEFAULT_PRIVACY_THRESHOLD = 5

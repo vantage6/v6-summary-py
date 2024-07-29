@@ -17,7 +17,7 @@ from vantage6.algorithm.client import AlgorithmClient
 @algorithm_client
 def summary(
     client: AlgorithmClient,
-    columns: list[str],
+    columns: list[str] | None = None,
     is_numeric: list[bool] | None = None,
     organizations_to_include: list[int] | None = None,
 ) -> Any:
@@ -29,8 +29,8 @@ def summary(
     ----------
     client : AlgorithmClient
         The client object used to communicate with the server.
-    columns : list[str]
-        The columns to include in the summary.
+    columns : list[str] | None
+        The columns to include in the summary. If not given, all columns are included.
     is_numeric : list[bool] | None
         Whether each of the columns is numeric or not. If not given, the algorithm will
         try to infer the type of the columns.
