@@ -38,12 +38,18 @@ def variance_per_data_station(
     dict
         Contains the variance of the numeric columns
     """
+    return _variance_per_data_station(df, columns, means)
+
+
+def _variance_per_data_station(
+    df: pd.DataFrame, columns: list[str], means: list[float]
+) -> dict:
     if not get_env_var(
         EnvVarsAllowed.ALLOW_VARIANCE.value, default="true", as_type="bool"
     ):
         error("Node policies do not allow sharing the variance.")
         return None
-    # Check that columnn names exist in the dataframe - note that this check should
+    # Check that column names exist in the dataframe - note that this check should
     # not be necessary if a user runs the central task as is has already been checked
     # in that case
     if not all([col in df.columns for col in columns]):
