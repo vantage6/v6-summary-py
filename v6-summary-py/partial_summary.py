@@ -27,7 +27,7 @@ def summary_per_data_station(
     is_numeric: list[bool] | None = None,
 ) -> dict:
     """
-    Compuate the summary statistics for a single data station to share with the
+    Compute the summary statistics for a single data station to share with the
     aggregator part of the algorithm
 
     Parameters
@@ -47,10 +47,18 @@ def summary_per_data_station(
         The summary statistics for the data station. If the summary statistics cannot
         be computed, None is returned
     """
+    return _summary_per_data_station(df, columns, is_numeric)
+
+
+def _summary_per_data_station(
+    df: pd.DataFrame,
+    columns: list[str] | None = None,
+    is_numeric: list[bool] | None = None,
+) -> dict:
     if not columns:
         columns = df.columns
 
-    # Check that columnn names exist in the dataframe
+    # Check that column names exist in the dataframe
     if not all([col in df.columns for col in columns]):
         non_existing_columns = [col for col in columns if col not in df.columns]
         raise InputError(
