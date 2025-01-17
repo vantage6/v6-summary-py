@@ -1,7 +1,10 @@
 import pandas as pd
 
 from vantage6.algorithm.tools.util import get_env_var
-from vantage6.algorithm.tools.exceptions import PrivacyThresholdViolation
+from vantage6.algorithm.tools.exceptions import (
+    PrivacyThresholdViolation,
+    NodePermissionException,
+)
 from .globals import (
     DEFAULT_MINIMUM_ROWS,
     DEFAULT_PRIVACY_THRESHOLD,
@@ -45,7 +48,7 @@ def check_privacy(df: pd.DataFrame, requested_columns: list[str]) -> None:
         allowed_columns = allowed_columns.split(",")
         for col in requested_columns:
             if col not in allowed_columns:
-                raise ValueError(
+                raise NodePermissionException(
                     f"The node administrator does not allow '{col}' to be requested in "
                     "this algorithm computation. Please contact the node administrator "
                     "for more information."
@@ -55,7 +58,7 @@ def check_privacy(df: pd.DataFrame, requested_columns: list[str]) -> None:
         non_allowed_collumns = non_allowed_collumns.split(",")
         for col in requested_columns:
             if col in non_allowed_collumns:
-                raise ValueError(
+                raise NodePermissionException(
                     f"The node administrator does not allow '{col}' to be requested in "
                     "this algorithm computation. Please contact the node administrator "
                     "for more information."

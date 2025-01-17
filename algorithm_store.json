@@ -2,73 +2,85 @@
   "description": "Compute common statistics such as mean, SD, min, and max",
   "functions": [
     {
+      "arguments": [
+        {
+          "default_value": null,
+          "conditional_value": null,
+          "name": "columns",
+          "is_frontend_only": false,
+          "description": "The columns to include in the summary. If not given, all columns are included.",
+          "conditional_operator": null,
+          "type": "column_list",
+          "display_name": "Columns to include",
+          "has_default_value": true
+        },
+        {
+          "default_value": null,
+          "conditional_value": null,
+          "name": "organizations_to_include",
+          "is_frontend_only": false,
+          "description": "The organizations to include in the task. If not given, all organizations in the collaboration are included.",
+          "conditional_operator": null,
+          "type": "organization_list",
+          "display_name": "Organizations to include",
+          "has_default_value": true
+        }
+      ],
+      "name": "summary",
       "description": "Run summary algorithm and obtain statistics combined for all nodes",
+      "type": "central",
       "ui_visualizations": [
         {
-          "description": "Table with summary statistics of all numerical columns",
-          "type": "table",
           "schema": {
             "location": ["numeric"],
             "columns": []
           },
-          "name": "Summary of numerical columns"
+          "name": "Summary of numerical columns",
+          "description": "Table with summary statistics of all numerical columns",
+          "type": "table"
         },
         {
-          "description": "Table with summary statistics of all categorical columns",
-          "type": "table",
           "schema": {
             "location": ["categorical"],
             "columns": []
           },
-          "name": "Summary of categorical columns"
+          "name": "Summary of categorical columns",
+          "description": "Table with summary statistics of all categorical columns",
+          "type": "table"
         },
         {
-          "description": "Table with counts of unique values in the categorical columns",
-          "type": "table",
           "schema": {
             "location": ["counts_unique_values"],
             "columns": []
           },
-          "name": "Unique value counts"
+          "name": "Unique value counts",
+          "description": "Table with counts of unique values in the categorical columns",
+          "type": "table"
         },
         {
-          "description": "Table with the number of complete data rows per data station",
-          "type": "table",
           "schema": {
             "location": ["num_complete_rows_per_node"],
             "columns": []
           },
-          "name": "Number of complete data rows"
+          "name": "Number of complete data rows",
+          "description": "Table with the number of complete data rows per data station",
+          "type": "table"
         }
       ],
+      "display_name": "Summary",
       "databases": [
         {
           "description": "Data to compute the summary statistics for",
           "name": "Database"
         }
-      ],
-      "type": "central",
-      "name": "summary",
-      "arguments": [
-        {
-          "description": "The columns to include in the summary. If not given, all columns are included.",
-          "type": "column_list",
-          "name": "columns"
-        },
-        {
-          "description": "The organizations to include in the task. If not given, all organizations in the collaboration are included.",
-          "type": "organization_list",
-          "name": "organizations_to_include"
-        }
       ]
     }
   ],
-  "vantage6_version": "4.6",
+  "vantage6_version": "4.9",
   "documentation_url": "https://algorithms.vantage6.ai/en/latest/v6-summary-py/docs/index.html",
   "name": "Summary statistics",
   "partitioning": "horizontal",
   "image": "harbor2.vantage6.ai/algorithms/summary",
   "developer_id": 1,
-  "reviews": "/api/review?algorithm_id=32",
   "code_url": "https://github.com/vantage6/v6-summary-py.git"
 }

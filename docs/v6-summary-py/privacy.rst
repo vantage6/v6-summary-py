@@ -38,8 +38,8 @@ records:
   .. code:: yaml
 
     algorithm_env:
-      SUMMARY_ALLOWED_COLUMNS: ["ageGroup", "isOverweight"]
-      SUMMARY_DISALLOWED_COLUMNS: ["age", "weight"]
+      SUMMARY_ALLOWED_COLUMNS: "ageGroup,isOverweight"
+      SUMMARY_DISALLOWED_COLUMNS: "age,weight"
 
   This configuration will ensure that only the columns `ageGroup` and `isOverweight`
   are allowed to be used in the computations. The columns `age`
@@ -48,7 +48,8 @@ records:
   allowed list, all other columns are automatically disallowed.
 
 - **Setting allowed statistics**: Some node administrators may not be comfortable with
-  sharing certain statistics. They can turn off the sharing of certain statistics by
+  sharing certain statistics. By default, all statistics are allowed. Node
+  administrators can turn off the sharing of certain statistics by
   adding the following to the node configuration file:
 
   .. code:: yaml
