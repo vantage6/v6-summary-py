@@ -7,6 +7,7 @@ encryption if that is enabled).
 """
 
 from typing import Any
+import pandas as pd
 
 from vantage6.algorithm.tools.util import info
 from vantage6.algorithm.tools.decorators import algorithm_client
@@ -80,26 +81,32 @@ def summary(
 
     # compute the variance now that we have the mean
     numerical_columns = list(results["numeric"].keys())
-    means = [results["numeric"][column]["mean"] for column in numerical_columns]
-    task = client.task.create(
-        input_={
-            "method": "variance_per_data_station",
-            "kwargs": {
-                "columns": numerical_columns,
-                "means": means,
+    means = [float(results["numeric"][column]["mean"]) for column in numerical_columns]
+    if numerical_columns:
+        task = client.task.create(
+            input_={
+                "method": "variance_per_data_station",
+                "kwargs": {
+                    "columns": numerical_columns,
+                    "means": means,
+                },
             },
-        },
-        organizations=organizations_to_include,
-        name="Subtask variance",
-        description="Compute variance per data station",
-    )
-    variance_results = client.wait_for_results(task_id=task.get("id"))
+            organizations=organizations_to_include,
+            name="Subtask variance",
+            description="Compute variance per data station",
+        )
+        variance_results = client.wait_for_results(task_id=task.get("id"))
 
-    # add the standard deviation to the results
-    results = _add_sd_to_results(results, variance_results, numerical_columns)
+        # add the standard deviation to the results
+        results = _add_sd_to_results(results, variance_results, numerical_columns)
 
     # return the final results of the algorithm
-    return results
+    return {
+        "numeric": results["numeric"].to_json(),
+        "categorical": results["categorical"].to_json(),
+        "counts_unique_values": results["counts_unique_values"].to_json(),
+        "num_complete_rows_per_node": results["num_complete_rows_per_node"].to_json(),
+    }
 
 
 def _aggregate_partial_summaries(results: list[dict]) -> dict:
@@ -122,7 +129,11 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
         if is_first:
             # copy results. Only convert num complete rows per node to a list so that
             # we can add the other nodes to it later
-            aggregated_summary = result
+            aggregated_summary["numeric"] = pd.DataFrame(result["numeric"])
+            aggregated_summary["categorical"] = pd.DataFrame(result["categorical"])
+            aggregated_summary["counts_unique_values"] = pd.DataFrame(
+                result["counts_unique_values"]
+            )
             aggregated_summary["num_complete_rows_per_node"] = [
                 result["num_complete_rows_per_node"]
             ]
@@ -130,25 +141,37 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
             continue
 
         # aggregate data for numeric colums
-        for column in result["numeric"]:
-            aggregated_dict = aggregated_summary["numeric"][column]
-            aggregated_dict["count"] += result["numeric"][column]["count"]
-            aggregated_dict["min"] = min(
-                aggregated_summary["numeric"][column]["min"],
-                result["numeric"][column]["min"],
-            )
-            aggregated_dict["max"] = max(
-                aggregated_summary["numeric"][column]["max"],
-                result["numeric"][column]["max"],
-            )
-            aggregated_dict["missing"] += result["numeric"][column]["missing"]
-            aggregated_dict["sum"] += result["numeric"][column]["sum"]
+        numeric_result = pd.DataFrame(result["numeric"])
+        if not numeric_result.empty:
+            aggregated_summary["numeric"].loc["count"] += numeric_result.loc["count"]
+            aggregated_summary["numeric"].loc["min"] = pd.concat(
+                [
+                    aggregated_summary["numeric"].loc["min"],
+                    numeric_result.loc["min"],
+                ],
+                axis=1,
+            ).min(axis=1)
+            aggregated_summary["numeric"].loc["max"] = pd.concat(
+                [
+                    aggregated_summary["numeric"].loc["max"],
+                    numeric_result.loc["max"],
+                ],
+                axis=1,
+            ).max(axis=1)
+            aggregated_summary["numeric"].loc["missing"] += numeric_result.loc[
+                "missing"
+            ]
+            aggregated_summary["numeric"].loc["sum"] += numeric_result.loc["sum"]
 
         # aggregate data for categorical columns
-        for column in result["categorical"]:
-            aggregated_dict = aggregated_summary["categorical"][column]
-            aggregated_dict["count"] += result["categorical"][column]["count"]
-            aggregated_dict["missing"] += result["categorical"][column]["missing"]
+        categorical_result = pd.DataFrame(result["categorical"])
+        if not categorical_result.empty:
+            aggregated_summary["categorical"].loc["count"] += categorical_result.loc[
+                "count"
+            ]
+            aggregated_summary["categorical"].loc["missing"] += categorical_result.loc[
+                "missing"
+            ]
 
         # add the number of complete rows for this node
         aggregated_summary["num_complete_rows_per_node"].append(
@@ -156,18 +179,23 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
         )
 
         # add the unique values
-        for column in result["counts_unique_values"]:
-            if column not in aggregated_summary["counts_unique_values"]:
-                aggregated_summary["counts_unique_values"][column] = {}
-            for value, count in result["counts_unique_values"][column].items():
-                if value not in aggregated_summary["counts_unique_values"][column]:
-                    aggregated_summary["counts_unique_values"][column][value] = 0
-                aggregated_summary["counts_unique_values"][column][value] += count
+        unique_values_result = pd.DataFrame(result["counts_unique_values"])
+        if not unique_values_result.empty:
+            aggregated_summary["counts_unique_values"] = aggregated_summary[
+                "counts_unique_values"
+            ].add(unique_values_result, fill_value=0)
 
     # now that all data is aggregated, we can compute the mean
-    for column in aggregated_summary["numeric"]:
-        aggregated_dict = aggregated_summary["numeric"][column]
-        aggregated_dict["mean"] = aggregated_dict["sum"] / aggregated_dict["count"]
+    if not aggregated_summary["numeric"].empty:
+        aggregated_summary["numeric"].loc["mean"] = (
+            aggregated_summary["numeric"].loc["sum"]
+            / aggregated_summary["numeric"].loc["count"]
+        )
+
+    # convert the list of complete rows per node to a pandas series
+    aggregated_summary["num_complete_rows_per_node"] = pd.Series(
+        aggregated_summary["num_complete_rows_per_node"]
+    )
 
     return aggregated_summary
 
@@ -191,10 +219,11 @@ def _add_sd_to_results(
     dict
         The results with the variance added.
     """
-    for column in numerical_columns:
-        sum_variance = 0
-        for node_results in variance_results:
-            sum_variance += node_results[column]
-        variance = sum_variance / (results["numeric"][column]["count"] - 1)
-        results["numeric"][column]["std"] = variance**0.5
+    if not numerical_columns:
+        return results
+    variance_df = pd.DataFrame(variance_results)
+    variance_sum_all_nodes = variance_df.sum()
+    results["numeric"].loc["std"] = (
+        variance_sum_all_nodes / (results["numeric"].loc["count"] - 1)
+    ) ** 0.5
     return results
