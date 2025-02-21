@@ -247,7 +247,7 @@ def test_convert_categorical_to_numeric():
             "method": "summary",
             "kwargs": {
                 "columns": ["D"],
-                "is_numeric": [True],
+                "numeric_columns": ["D"],
             },
         },
         organizations=[org_ids[0]],

@@ -15,9 +15,9 @@ Input arguments
      - List of column names (strings)
      - The columns for which to get a data summary. If not provided, all columns will
        be used.
-   * - ``is_numeric``
-     - List of booleans
-     - Indicate whether the columns are numeric or not. If not provided, the algorithm
+   * - ``numeric_columns``
+     - List of column names (strings)
+     - Indicate which of the columns are numeric. If not provided, the algorithm
        will infer the type of the columns.
    * - ``organizations_to_include``
      - List of integers

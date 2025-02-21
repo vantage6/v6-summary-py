@@ -19,7 +19,7 @@ image:
 	@echo "Building ${REGISTRY}/algorithms/summary:latest"
 	docker buildx build \
 		--tag ${REGISTRY}/algorithms/summary:${TAG}-v6-${VANTAGE6_VERSION} \
-		--tag ${REGISTRY}/algorithms/summary:latest \
+		--tag ${REGISTRY}/algorithms/summary:${TAG} \
 		--platform ${PLATFORMS} \
 		-f ./Dockerfile \
 		$(if ${_condition_push},--push .,.)
