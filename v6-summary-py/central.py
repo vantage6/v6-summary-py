@@ -19,7 +19,7 @@ from vantage6.algorithm.client import AlgorithmClient
 def summary(
     client: AlgorithmClient,
     columns: list[str] | None = None,
-    is_numeric: list[bool] | None = None,
+    numeric_columns: list[str] | None = None,
     organizations_to_include: list[int] | None = None,
 ) -> Any:
     """
@@ -32,16 +32,18 @@ def summary(
         The client object used to communicate with the server.
     columns : list[str] | None
         The columns to include in the summary. If not given, all columns are included.
-    is_numeric : list[bool] | None
-        Whether each of the columns is numeric or not. If not given, the algorithm will
-        try to infer the type of the columns.
+    numeric_columns : list[str] | None
+        Which of the columns are numeric. If not given, it will be inferred from the
+        data.
     organizations_to_include : list[int] | None
         The organizations to include in the task. If not given, all organizations
         in the collaboration are included.
     """
-    if is_numeric and len(is_numeric) != len(columns):
+    if columns and numeric_columns and not set(numeric_columns).issubset(set(columns)):
+        numeric_not_in_columns = set(numeric_columns) - set(columns)
         raise InputError(
-            "Length of is_numeric list does not match the length of columns list"
+            "The 'numeric_columns' should be a subset of 'columns'. The following "
+            f"columns are not in 'columns': {numeric_not_in_columns}"
         )
 
     # get all organizations (ids) within the collaboration so you can send a
@@ -58,7 +60,7 @@ def summary(
         "method": "summary_per_data_station",
         "kwargs": {
             "columns": columns,
-            "is_numeric": is_numeric,
+            "numeric_columns": numeric_columns,
         },
     }
 

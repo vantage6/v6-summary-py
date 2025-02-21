@@ -17,14 +17,14 @@ from .globals import (
     ENVVAR_PRIVACY_THRESHOLD,
     EnvVarsAllowed,
 )
-from .utils import check_privacy, check_match_inferred_is_numeric
+from .utils import check_privacy, check_match_inferred_numeric
 
 
 @data(1)
 def summary_per_data_station(
     df: pd.DataFrame,
     columns: list[str] | None = None,
-    is_numeric: list[bool] | None = None,
+    numeric_columns: list[str] | None = None,
 ) -> dict:
     """
     Compute the summary statistics for a single data station to share with the
@@ -37,9 +37,9 @@ def summary_per_data_station(
     columns : list[str] | None
         The columns to compute the summary statistics for. If not provided, all columns
         are included.
-    is_numeric : list[bool]
-        Whether the columns are numeric or not. For non-numeric columns, other summary
-        statistics are computed. If not provided, it will be inferred.
+    numeric_columns : list[str] | None
+        List of columns that are numeric. If not provided, it will be inferred from the
+        data.
 
     Returns
     -------
@@ -47,13 +47,13 @@ def summary_per_data_station(
         The summary statistics for the data station. If the summary statistics cannot
         be computed, None is returned
     """
-    return _summary_per_data_station(df, columns, is_numeric)
+    return _summary_per_data_station(df, columns, numeric_columns)
 
 
 def _summary_per_data_station(
     df: pd.DataFrame,
     columns: list[str] | None = None,
-    is_numeric: list[bool] | None = None,
+    numeric_columns: list[str] | None = None,
 ) -> dict:
     if not columns:
         columns = df.columns
@@ -73,19 +73,14 @@ def _summary_per_data_station(
     check_privacy(df, columns)
 
     # Split the data in numeric and non-numeric columns
-    inferred_is_numeric = [df[col].dtype in [int, float] for col in df.columns]
-    if is_numeric is None:
-        is_numeric = inferred_is_numeric
+    inferred_numeric_columns = [df[col].name in [int, float] for col in df.columns]
+    if numeric_columns is None:
+        numeric_columns = inferred_numeric_columns
     else:
-        df = check_match_inferred_is_numeric(
-            is_numeric, inferred_is_numeric, columns, df
-        )
+        df = check_match_inferred_numeric(numeric_columns, inferred_numeric_columns, df)
 
     # set numeric and non-numeric columns
-    numeric_columns = [col for col, is_num in zip(columns, is_numeric) if is_num]
-    non_numeric_columns = [
-        col for col, is_num in zip(columns, is_numeric) if not is_num
-    ]
+    non_numeric_columns = list(set(columns) - set(numeric_columns))
     df_numeric = df[numeric_columns]
     df_non_numeric = df[non_numeric_columns]
 

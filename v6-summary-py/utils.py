@@ -65,58 +65,43 @@ def check_privacy(df: pd.DataFrame, requested_columns: list[str]) -> None:
                 )
 
 
-def check_match_inferred_is_numeric(
-    is_numeric: list[bool],
-    inferred_is_numeric: list[bool],
-    columns: list[str],
+def check_match_inferred_numeric(
+    numeric_columns: list[str],
+    inferred_numeric_columns: list[str],
     df: pd.DataFrame,
-):
+) -> pd.DataFrame:
     """
-    Check if the provided is_numeric list matches the inferred is_numeric list
+    Check if the provided numeric_columns list matches the inferred numerical columns
 
     Parameters
     ----------
-    is_numeric : list[bool]
-        The provided is_numeric list
-    inferred_is_numeric : list[bool]
-        The inferred is_numeric list
-    columns : list[str]
-        The columns for which the is_numeric list is provided
+    numeric_columns : list[str]
+        The user-provided list of columns to be treated as numeric. If user did not
+        provide this list, it is equal to the inferred_numeric_columns
+    inferred_numeric_columns : list[str]
+        The inferred list of numerical columns
     df: pd.DataFrame
         The original data. The type of the data may be modified if possible
+
+    Returns
+    -------
+    pd.DataFrame
+        The data with the columns cast to numeric if possible
+
+    Raises
+    ------
+    ValueError
+        If the provided numeric_columns list does not match the inferred_numeric_columns
     """
-    if len(is_numeric) != len(columns):
-        raise ValueError(
-            "Length of is_numeric list does not match the length of columns list"
-        )
-    if not all(
-        [is_numeric[i] == inferred_is_numeric[i] for i in range(len(is_numeric))]
-    ):
-        # check which columns do not match
-        wrongly_numeric_columns = [
-            columns[i]
-            for i in range(len(columns))
-            if is_numeric[i] and not inferred_is_numeric[i]
-        ]
-        wrongly_non_numeric_columns = [
-            columns[i]
-            for i in range(len(columns))
-            if not is_numeric[i] and inferred_is_numeric[i]
-        ]
-        msg = ""
-        if wrongly_numeric_columns:
-            # try to cast the columns to numeric
+    error_msg = ""
+    for col in numeric_columns:
+        if col not in inferred_numeric_columns:
             try:
-                df = cast_df_to_numeric(df, wrongly_numeric_columns)
+                df = cast_df_to_numeric(df, [col])
             except ValueError as exc:
-                msg += str(exc)
-        if wrongly_non_numeric_columns:
-            msg += (
-                f"Columns {wrongly_non_numeric_columns} are numeric, but is_numeric is "
-                "set to False"
-            )
-        if msg:
-            raise ValueError(msg)
+                error_msg += str(exc)
+    if error_msg:
+        raise ValueError(error_msg)
     return df
 
 
