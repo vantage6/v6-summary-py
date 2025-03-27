@@ -12,7 +12,7 @@ with open(path.join(here, "README.md"), encoding="utf-8") as f:
 # needed in some other steps.
 setup(
     name="v6-summary-py",
-    version="1.0.0",
+    version="1.1.0",
     description="Create a summary of the data (mean, range, variance, length, ...)",
     long_description=long_description,
     long_description_content_type="text/markdown",
