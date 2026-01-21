@@ -8,6 +8,7 @@ or directly to the user (if they requested partial results).
 """
 
 import pandas as pd
+import numpy as np
 
 from vantage6.algorithm.tools.util import info, warn, get_env_var
 from vantage6.algorithm.tools.decorators import data
@@ -73,7 +74,8 @@ def _summary_per_data_station(
     check_privacy(df, columns)
 
     # Split the data in numeric and non-numeric columns
-    inferred_numeric_columns = [df[col].name in [int, float] for col in df.columns]
+    # inferred_numeric_columns = [df[col].name in [int, float] for col in df.columns]
+    inferred_numeric_columns = df.select_dtypes(include=[int, float]).columns.tolist()
     if numeric_columns is None:
         numeric_columns = inferred_numeric_columns
     else:
@@ -138,10 +140,11 @@ def _get_numeric_summary(df: pd.DataFrame) -> pd.DataFrame:
     df : pd.DataFrame
         The data to compute the summary statistics for
     """
-    summary_numeric = df.describe(include=[int, float], percentiles=[])
+    summary_numeric = df.describe(include=[int, float], percentiles=[0.25, 0.5, 0.75])
+    summary_numeric.loc["IQR"] = summary_numeric.loc["75%"] - summary_numeric.loc["25%"]
     summary_numeric.loc["missing"] = df.isna().sum()
     summary_numeric.loc["sum"] = df.sum()
-    summary_numeric.drop(["50%", "mean", "std"], inplace=True)
+    summary_numeric.drop(["mean", "std"], inplace=True)
     return summary_numeric
 
 

@@ -8,6 +8,7 @@ encryption if that is enabled).
 
 from typing import Any
 import pandas as pd
+import json as js
 
 from vantage6.algorithm.tools.util import info
 from vantage6.algorithm.tools.decorators import algorithm_client
@@ -104,7 +105,7 @@ def summary(
 
     # return the final results of the algorithm
     return {
-        "numeric": results["numeric"].to_json(),
+        "numeric": js.dumps(results["numeric"], indent=2),
         "categorical": results["categorical"].to_json(),
         "counts_unique_values": results["counts_unique_values"].to_json(),
         "num_complete_rows_per_node": results["num_complete_rows_per_node"].to_json(),
@@ -123,15 +124,10 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
     aggregated_summary = {}
     is_first = True
     for result in results:
-        if result is None:
-            raise AlgorithmExecutionError(
-                "At least one of the nodes returned invalid result. Please check the "
-                "logs."
-            )
         if is_first:
             # copy results. Only convert num complete rows per node to a list so that
             # we can add the other nodes to it later
-            aggregated_summary["numeric"] = pd.DataFrame(result["numeric"])
+            aggregated_summary["numeric"] = result["numeric"]
             aggregated_summary["categorical"] = pd.DataFrame(result["categorical"])
             aggregated_summary["counts_unique_values"] = pd.DataFrame(
                 result["counts_unique_values"]
@@ -139,31 +135,59 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
             aggregated_summary["num_complete_rows_per_node"] = [
                 result["num_complete_rows_per_node"]
             ]
+            for column in result["numeric"]:
+                aggregated_summary["numeric"][column]["25%"] = [
+                    result["numeric"][column]["25%"]
+                ]
+                aggregated_summary["numeric"][column]["50%"] = [
+                    result["numeric"][column]["50%"]
+                ]
+                aggregated_summary["numeric"][column]["75%"] = [
+                    result["numeric"][column]["75%"]
+                ]
+                aggregated_summary["numeric"][column]["IQR"] = [
+                    result["numeric"][column]["IQR"]
+                ]
             is_first = False
             continue
 
         # aggregate data for numeric colums
         numeric_result = pd.DataFrame(result["numeric"])
         if not numeric_result.empty:
-            aggregated_summary["numeric"].loc["count"] += numeric_result.loc["count"]
-            aggregated_summary["numeric"].loc["min"] = pd.concat(
-                [
-                    aggregated_summary["numeric"].loc["min"],
-                    numeric_result.loc["min"],
-                ],
-                axis=1,
-            ).min(axis=1)
-            aggregated_summary["numeric"].loc["max"] = pd.concat(
-                [
-                    aggregated_summary["numeric"].loc["max"],
-                    numeric_result.loc["max"],
-                ],
-                axis=1,
-            ).max(axis=1)
-            aggregated_summary["numeric"].loc["missing"] += numeric_result.loc[
-                "missing"
-            ]
-            aggregated_summary["numeric"].loc["sum"] += numeric_result.loc["sum"]
+            for column in numeric_result.columns:
+                aggregated_summary["numeric"][column]["count"] += float(
+                    numeric_result.at["count", column]
+                )
+                aggregated_summary["numeric"][column]["min"] = float(
+                    min(
+                        aggregated_summary["numeric"][column]["min"],
+                        numeric_result.at["min", column],
+                    )
+                )
+                aggregated_summary["numeric"][column]["max"] = float(
+                    max(
+                        aggregated_summary["numeric"][column]["max"],
+                        numeric_result.at["max", column],
+                    )
+                )
+                aggregated_summary["numeric"][column]["missing"] += float(
+                    numeric_result.at["missing", column]
+                )
+                aggregated_summary["numeric"][column]["sum"] += float(
+                    numeric_result.at["sum", column]
+                )
+                aggregated_summary["numeric"][column]["25%"].append(
+                    result["numeric"][column]["25%"]
+                )
+                aggregated_summary["numeric"][column]["50%"].append(
+                    result["numeric"][column]["50%"]
+                )
+                aggregated_summary["numeric"][column]["75%"].append(
+                    result["numeric"][column]["75%"]
+                )
+                aggregated_summary["numeric"][column]["IQR"].append(
+                    result["numeric"][column]["IQR"]
+                )
 
         # aggregate data for categorical columns
         categorical_result = pd.DataFrame(result["categorical"])
@@ -188,11 +212,13 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
             ].add(unique_values_result, fill_value=0)
 
     # now that all data is aggregated, we can compute the mean
-    if not aggregated_summary["numeric"].empty:
-        aggregated_summary["numeric"].loc["mean"] = (
-            aggregated_summary["numeric"].loc["sum"]
-            / aggregated_summary["numeric"].loc["count"]
-        )
+    if bool(aggregated_summary["numeric"]):
+        for column in aggregated_summary["numeric"]:
+            if aggregated_summary["numeric"][column]["count"]:
+                aggregated_summary["numeric"][column]["mean"] = (
+                    aggregated_summary["numeric"][column]["sum"]
+                    / aggregated_summary["numeric"][column]["count"]
+                )
 
     # convert the list of complete rows per node to a pandas series
     aggregated_summary["num_complete_rows_per_node"] = pd.Series(
@@ -225,7 +251,13 @@ def _add_sd_to_results(
         return results
     variance_df = pd.DataFrame(variance_results)
     variance_sum_all_nodes = variance_df.sum()
-    results["numeric"].loc["std"] = (
-        variance_sum_all_nodes / (results["numeric"].loc["count"] - 1)
-    ) ** 0.5
+    for column in numerical_columns:
+        if results["numeric"][column]["count"] > 1:
+            results["numeric"][column]["std"] = (
+                float(
+                    variance_sum_all_nodes[column]
+                    / (results["numeric"][column]["count"] - 1)
+                )
+                ** 0.5
+            )
     return results

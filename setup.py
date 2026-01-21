@@ -19,6 +19,6 @@ setup(
     url="https://github.com/vantage6/v6-summary-py",
     packages=find_packages(),
     python_requires=">=3.10",
-    install_requires=["vantage6-algorithm-tools", "pandas"],
+    install_requires=["vantage6-algorithm-tools", "pandas", "numpy"],
     extras_require={"dev": ["pytest"]},
 )
