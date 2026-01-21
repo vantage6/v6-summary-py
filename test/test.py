@@ -17,8 +17,8 @@ import pandas as pd
 from vantage6.algorithm.tools.util import info
 from vantage6.algorithm.tools.mock_client import MockAlgorithmClient
 
-df1 = pd.read_csv("/Users/vramella/Desktop/data_org1.csv")
-df2 = pd.read_csv("/Users/vramella/Desktop/data_org2.csv")
+df1 = pd.read_csv("./data_org1.csv")
+df2 = pd.read_csv("./data_org2.csv")
 
 ## Mock client
 client = MockAlgorithmClient(
