@@ -59,7 +59,7 @@ first, especially the part about the
       organizations=[1],
       name='Compute data summary',
       description='Create a data summary',
-      image='harbor2.vantage6.ai/algorithms/v6-summary-py:latest',
+      image='ghcr.io/vantage6/algorithm/summary:latest',
       input=input_,
       databases=[
           {'label': 'default'}

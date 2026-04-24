@@ -39,9 +39,9 @@ docker tag [my_docker_image_name] [another_image_name]
 ```
 
 This way, you can e.g. do
-`docker tag local_average_algorithm harbor2.vantage6.ai/algorithms/average` to
+`docker tag local_average_algorithm ghcr.io/vantage6/algorithm/average` to
 make the algorithm available on a remote Docker registry (in this case
-`harbor2.vantage6.ai`).
+`ghcr.io/vantage6`).
 
 Finally, you need to push the image to the Docker registry. This can be done
 by running

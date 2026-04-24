@@ -1,5 +1,5 @@
 {
-  "image": "harbor2.vantage6.ai/algorithms/summary",
+  "image": "ghcr.io/vantage6/algorithm/summary",
   "vantage6_version": "4.9",
   "description": "Compute common statistics such as mean, SD, min, and max",
   "code_url": "https://github.com/vantage6/v6-summary-py.git",
