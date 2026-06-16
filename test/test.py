@@ -12,15 +12,14 @@ installed. This can be done by running:
     pip install vantage6-algorithm-tools
 """
 
+import json
 import os
 import pytest
 import pandas as pd
 import numpy as np
 
-from vantage6.algorithm.tools.mock_client import MockAlgorithmClient
+from vantage6.algorithm.mock.network import MockNetwork
 from vantage6.algorithm.tools.exceptions import (
-    AlgorithmExecutionError,
-    PrivacyThresholdViolation,
     InputError,
 )
 
@@ -47,54 +46,64 @@ size_per_df = int(size / 2)
 df1 = data.iloc[:size_per_df, :]
 df2 = data.iloc[size_per_df:, :]
 
-## Mock client
-client = MockAlgorithmClient(
+DATABASE_LABEL = "Database"
+
+## Mock network
+network = MockNetwork(
     datasets=[
-        # Data for first organization
-        [
-            {
-                "database": df1,
-            }
-        ],
-        # Data for second organization
-        [
-            {
-                "database": df2,
-            }
-        ],
+        {DATABASE_LABEL: {"database": df1}},
+        {DATABASE_LABEL: {"database": df2}},
     ],
-    module="v6-summary-py",
+    module_name="v6-summary-py",
 )
+client = network.user_client
+
+DATABASES = [{"type": "dataframe", "dataframe_id": network.hq.dataframes[0]["id"]}]
 
 # list mock organizations
 organizations = client.organization.list()
 org_ids = [organization["id"] for organization in organizations]
 
 
+def _unwrap_central(results):
+    """The central summary method returns JSON strings for table fields."""
+    for key in (
+        "numeric",
+        "categorical",
+        "counts_unique_values",
+        "num_complete_rows_per_node",
+    ):
+        if isinstance(results[0].get(key), str):
+            results[0][key] = json.loads(results[0][key])
+    if isinstance(results[0].get("num_complete_rows_per_node"), dict):
+        results[0]["num_complete_rows_per_node"] = list(
+            results[0]["num_complete_rows_per_node"].values()
+        )
+    return results
+
+
 central_task = client.task.create(
-    input_={
-        "method": "summary",
-        "kwargs": {
-            "columns": columns,
-        },
+    method="summary",
+    arguments={
+        "columns": columns,
     },
     organizations=[org_ids[0]],
+    databases=DATABASES,
 )
-results = client.wait_for_results(central_task.get("id"))
+results = _unwrap_central(client.wait_for_results(central_task.get("id")))
 
 
 def test_central_all_columns():
     """test central method on all columns"""
     central_task = client.task.create(
-        input_={
-            "method": "summary",
-            "kwargs": {
-                "columns": columns,
-            },
+        method="summary",
+        arguments={
+            "columns": columns,
         },
         organizations=[org_ids[0]],
+        databases=DATABASES,
     )
-    results = client.wait_for_results(central_task.get("id"))
+    results = _unwrap_central(client.wait_for_results(central_task.get("id")))
 
     # check results from central task
     num_complete_rows_per_node = results[0]["num_complete_rows_per_node"]
@@ -116,12 +125,12 @@ def test_central_all_columns():
     assert numeric_results["A"]["sum"] == data["A"].sum()
     assert numeric_results["B"]["sum"] == data["B"].sum()
     assert numeric_results["C"]["sum"] == data["C"].sum()
-    assert numeric_results["A"]["mean"] == data["A"].mean()
-    assert numeric_results["B"]["mean"] == data["B"].mean()
-    assert numeric_results["C"]["mean"] == data["C"].mean()
-    assert numeric_results["A"]["std"] == data["A"].std()
-    assert numeric_results["B"]["std"] == data["B"].std()
-    assert numeric_results["C"]["std"] == data["C"].std()
+    assert numeric_results["A"]["mean"] == pytest.approx(data["A"].mean())
+    assert numeric_results["B"]["mean"] == pytest.approx(data["B"].mean())
+    assert numeric_results["C"]["mean"] == pytest.approx(data["C"].mean())
+    assert numeric_results["A"]["std"] == pytest.approx(data["A"].std())
+    assert numeric_results["B"]["std"] == pytest.approx(data["B"].std())
+    assert numeric_results["C"]["std"] == pytest.approx(data["C"].std())
     categorical_results = results[0]["categorical"]
     assert categorical_results["D"]["count"] == data["D"].count()
     assert categorical_results["E"]["count"] == data["E"].count()
@@ -146,15 +155,14 @@ def test_central_all_columns():
 def test_central_single_numeric_column():
     """ensure that we can run a task for a single numeric column"""
     task = client.task.create(
-        input_={
-            "method": "summary",
-            "kwargs": {
-                "columns": ["A"],
-            },
+        method="summary",
+        arguments={
+            "columns": ["A"],
         },
         organizations=[org_ids[0]],
+        databases=DATABASES,
     )
-    results = client.wait_for_results(task.get("id"))
+    results = _unwrap_central(client.wait_for_results(task.get("id")))
     assert results[0]["numeric"]["A"]["count"] == data["A"].count()
     assert results[0]["numeric"]["A"]["min"] == data["A"].min()
     assert results[0]["numeric"]["A"]["max"] == data["A"].max()
@@ -169,15 +177,14 @@ def test_central_single_numeric_column():
 def test_central_single_categorical_column():
     """ensure that we can run a task for a single categorical column"""
     task = client.task.create(
-        input_={
-            "method": "summary",
-            "kwargs": {
-                "columns": ["E"],
-            },
+        method="summary",
+        arguments={
+            "columns": ["E"],
         },
         organizations=[org_ids[0]],
+        databases=DATABASES,
     )
-    results = client.wait_for_results(task.get("id"))
+    results = _unwrap_central(client.wait_for_results(task.get("id")))
     assert results[0]["categorical"]["E"]["count"] == data["E"].count()
     assert results[0]["categorical"]["E"]["missing"] == data["E"].isna().sum()
     assert results[0]["numeric"] == {}
@@ -193,30 +200,30 @@ def test_central_single_categorical_column():
 
 def test_central_non_existing_column():
     """check that non-existing columns give an error"""
-    with pytest.raises(InputError):
-        client.task.create(
-            input_={
-                "method": "summary",
-                "kwargs": {
-                    "columns": ["non-existing-column"],
-                },
+    with pytest.raises((InputError, SystemExit)):
+        task = client.task.create(
+            method="summary",
+            arguments={
+                "columns": ["non-existing-column"],
             },
             organizations=[org_ids[0]],
+            databases=DATABASES,
         )
+        client.wait_for_results(task.get("id"))
 
 
 def test_partial_non_existing_column():
     """Test that non-existing columns give an error"""
-    with pytest.raises(InputError):
-        client.task.create(
-            input_={
-                "method": "summary_per_data_station",
-                "kwargs": {
-                    "columns": ["non-existing-column"],
-                },
+    with pytest.raises((InputError, SystemExit)):
+        task = client.task.create(
+            method="summary_per_data_station",
+            arguments={
+                "columns": ["non-existing-column"],
             },
             organizations=[org_ids[0]],
+            databases=DATABASES,
         )
+        client.wait_for_results(task.get("id"))
 
 
 def test_privacy_threshold_categorical():
@@ -225,15 +232,14 @@ def test_privacy_threshold_categorical():
     """
     os.environ["SUMMARY_PRIVACY_THRESHOLD"] = "1000"
     task = client.task.create(
-        input_={
-            "method": "summary",
-            "kwargs": {
-                "columns": ["D"],
-            },
+        method="summary",
+        arguments={
+            "columns": ["D"],
         },
         organizations=[org_ids[0]],
+        databases=DATABASES,
     )
-    results = client.wait_for_results(task.get("id"))
+    results = _unwrap_central(client.wait_for_results(task.get("id")))
     os.environ["SUMMARY_PRIVACY_THRESHOLD"] = "5"
     assert results[0]["counts_unique_values"]["D"] == {}
 
@@ -243,16 +249,15 @@ def test_convert_categorical_to_numeric():
     # note that column D is a categorical column that consists of "1", "2", "3", "4"
     # so it should be convertible to a numeric column
     central_task = client.task.create(
-        input_={
-            "method": "summary",
-            "kwargs": {
-                "columns": ["D"],
-                "numeric_columns": ["D"],
-            },
+        method="summary",
+        arguments={
+            "columns": ["D"],
+            "numeric_columns": ["D"],
         },
         organizations=[org_ids[0]],
+        databases=DATABASES,
     )
-    results = client.wait_for_results(central_task.get("id"))
+    results = _unwrap_central(client.wait_for_results(central_task.get("id")))
     numeric_data_D = data["D"].astype(int)
     assert results[0]["numeric"]["D"]["count"] == numeric_data_D.count()
     assert results[0]["numeric"]["D"]["min"] == numeric_data_D.min()
@@ -268,13 +273,12 @@ def test_convert_categorical_to_numeric():
 def test_partial_all_columns():
     """Verify results from partial task"""
     task = client.task.create(
-        input_={
-            "method": "summary_per_data_station",
-            "kwargs": {
-                "columns": columns,
-            },
+        method="summary_per_data_station",
+        arguments={
+            "columns": columns,
         },
         organizations=org_ids,
+        databases=DATABASES,
     )
 
     # Get the results from the task

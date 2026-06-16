@@ -9,8 +9,10 @@ or directly to the user (if they requested partial results).
 
 import pandas as pd
 
-from vantage6.algorithm.tools.util import info, warn, get_env_var
-from vantage6.algorithm.tools.decorators import data
+from vantage6.common import info, warning
+from vantage6.algorithm.tools.util import get_env_var
+from vantage6.algorithm.decorator.action import federated
+from vantage6.algorithm.decorator.data import dataframe
 from vantage6.algorithm.tools.exceptions import InputError
 from .globals import (
     DEFAULT_PRIVACY_THRESHOLD,
@@ -20,7 +22,8 @@ from .globals import (
 from .utils import check_privacy, check_match_inferred_numeric
 
 
-@data(1)
+@federated
+@dataframe(1)
 def summary_per_data_station(
     df: pd.DataFrame,
     columns: list[str] | None = None,
@@ -73,7 +76,9 @@ def _summary_per_data_station(
     check_privacy(df, columns)
 
     # Split the data in numeric and non-numeric columns
-    inferred_numeric_columns = [df[col].name in [int, float] for col in df.columns]
+    inferred_numeric_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])
+    ]
     if numeric_columns is None:
         numeric_columns = inferred_numeric_columns
     else:
@@ -107,7 +112,7 @@ def _summary_per_data_station(
     if not get_env_var(
         EnvVarsAllowed.ALLOW_NUM_COMPLETE_ROWS.value, default="true", as_type="bool"
     ):
-        warn(
+        warning(
             "Removing number of complete rows from summary as policies do not "
             "allow sharing it."
         )
@@ -115,7 +120,7 @@ def _summary_per_data_station(
     if not get_env_var(
         EnvVarsAllowed.ALLOW_COUNTS_UNIQUE_VALUES.value, default="true", as_type="bool"
     ):
-        warn(
+        warning(
             "Removing counts of unique values from summary as policies do not "
             "allow sharing it."
         )
@@ -141,7 +146,9 @@ def _get_numeric_summary(df: pd.DataFrame) -> pd.DataFrame:
     summary_numeric = df.describe(include=[int, float], percentiles=[])
     summary_numeric.loc["missing"] = df.isna().sum()
     summary_numeric.loc["sum"] = df.sum()
-    summary_numeric.drop(["50%", "mean", "std"], inplace=True)
+    # Depending on pandas version / describe settings, some statistic rows may
+    # not be present. Make this robust to avoid crashes on nodes.
+    summary_numeric.drop(["50%", "mean", "std"], inplace=True, errors="ignore")
     return summary_numeric
 
 
@@ -158,7 +165,9 @@ def _get_categorical_summary(df: pd.DataFrame) -> pd.DataFrame:
     # that we don't want to share
     summary_categorical = df.describe(exclude=[int, float])
     summary_categorical.loc["missing"] = df.isna().sum()
-    summary_categorical.drop(["top", "freq", "unique"], inplace=True)
+    # These rows may not always be present (e.g. depending on pandas dtype
+    # inference). Don't fail the computation if they are missing.
+    summary_categorical.drop(["top", "freq", "unique"], inplace=True, errors="ignore")
     return summary_categorical
 
 
@@ -213,7 +222,7 @@ def _mask_privacy(counts: pd.Series, privacy_threshold: int, column: str) -> dic
         # Because it is rather difficult to ensure that nothing can be inferred, we
         # choose not to share anything if one of the frequencies is too low.
         # TODO how do we make clear to the user that this happened in the central task?
-        warn(
+        warning(
             f"Value counts for column {column} contain values with low frequency. "
             "All counts for this column will be masked."
         )
@@ -240,22 +249,22 @@ def _filter_results(
         The filtered summary statistics for the numeric and non-numeric columns
     """
     if not get_env_var(EnvVarsAllowed.ALLOW_MIN.value, default="true", as_type="bool"):
-        warn("Removing minimum from summary as policies do not allow sharing it.")
+        warning("Removing minimum from summary as policies do not allow sharing it.")
         summary_numeric.drop("min", inplace=True)
     if not get_env_var(EnvVarsAllowed.ALLOW_MAX.value, default="true", as_type="bool"):
-        warn("Removing maximum from summary as policies do not allow sharing it.")
+        warning("Removing maximum from summary as policies do not allow sharing it.")
         summary_numeric.drop("max", inplace=True)
     if not get_env_var(
         EnvVarsAllowed.ALLOW_COUNT.value, default="true", as_type="bool"
     ):
-        warn("Removing count from summary as policies do not allow sharing it.")
+        warning("Removing count from summary as policies do not allow sharing it.")
         summary_numeric.drop("count", inplace=True)
     if not get_env_var(EnvVarsAllowed.ALLOW_SUM.value, default="true", as_type="bool"):
-        warn("Removing sum from summary as policies do not allow sharing it.")
+        warning("Removing sum from summary as policies do not allow sharing it.")
         summary_numeric.drop("sum", inplace=True)
     if not get_env_var(
         EnvVarsAllowed.ALLOW_MISSING.value, default="true", as_type="bool"
     ):
-        warn("Removing missing from summary as policies do not allow sharing it.")
+        warning("Removing missing from summary as policies do not allow sharing it.")
         summary_numeric.drop("missing", inplace=True)
     return summary_numeric, summary_categorical
