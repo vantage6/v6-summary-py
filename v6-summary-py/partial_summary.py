@@ -146,7 +146,9 @@ def _get_numeric_summary(df: pd.DataFrame) -> pd.DataFrame:
     summary_numeric = df.describe(include=[int, float], percentiles=[])
     summary_numeric.loc["missing"] = df.isna().sum()
     summary_numeric.loc["sum"] = df.sum()
-    summary_numeric.drop(["50%", "mean", "std"], inplace=True)
+    # Depending on pandas version / describe settings, some statistic rows may
+    # not be present. Make this robust to avoid crashes on nodes.
+    summary_numeric.drop(["50%", "mean", "std"], inplace=True, errors="ignore")
     return summary_numeric
 
 
@@ -163,7 +165,9 @@ def _get_categorical_summary(df: pd.DataFrame) -> pd.DataFrame:
     # that we don't want to share
     summary_categorical = df.describe(exclude=[int, float])
     summary_categorical.loc["missing"] = df.isna().sum()
-    summary_categorical.drop(["top", "freq", "unique"], inplace=True)
+    # These rows may not always be present (e.g. depending on pandas dtype
+    # inference). Don't fail the computation if they are missing.
+    summary_categorical.drop(["top", "freq", "unique"], inplace=True, errors="ignore")
     return summary_categorical
 
 
