@@ -141,7 +141,7 @@
           "name": "means",
           "display_name": "Means",
           "description": "Global means for each numeric column",
-          "type": "list",
+          "type": "float_list",
           "has_default_value": false,
           "is_frontend_only": false
         }
