@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "v6-summary-py"
-version = "1.2.0"
+version = "1.4.0"
 description = "Create a summary of the data (mean, range, variance, length, ...)"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -40,6 +40,3 @@ packages = ["v6-summary-py"]
 dev = [
   "pytest",
 ]
-
-[tool.uv]
-prerelease = "allow"
