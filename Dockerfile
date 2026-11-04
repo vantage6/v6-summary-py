@@ -1,4 +1,4 @@
-FROM ghcr.io/vantage6/infrastructure/algorithm-base:5
+FROM ghcr.io/vantage6/infrastructure/algorithm-base:5.0
 
 # This is a placeholder that should be overloaded by invoking
 # docker build with '--build-arg PKG_NAME=...'
