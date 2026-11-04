@@ -43,6 +43,11 @@ data = pd.DataFrame(
 n_rows = len(data)
 size_per_df = int(size / 2)
 
+# Column G has a rare value only in the second half of the data, so the second node
+# hides its counts for G while the first node shares them. G is not in `columns`.
+data["G"] = "common"
+data.loc[size_per_df : size_per_df + 1, "G"] = "rare"
+
 df1 = data.iloc[:size_per_df, :]
 df2 = data.iloc[size_per_df:, :]
 
@@ -338,3 +343,20 @@ def test_partial_all_columns():
         assert counts_unique_values["F"]["other"] == check_df["F"].value_counts().get(
             "other", 0
         )
+
+
+def test_central_counts_hidden_on_one_node():
+    """A column hidden on one node is returned as {}: not the other node's counts, and
+    not the values of other columns"""
+    task = client.task.create(
+        method="summary",
+        arguments={
+            "columns": ["E", "G"],
+        },
+        organizations=[org_ids[0]],
+        databases=DATABASES,
+    )
+    results = _unwrap_central(client.wait_for_results(task.get("id")))
+    counts_unique_values = results[0]["counts_unique_values"]
+    assert counts_unique_values["G"] == {}
+    assert counts_unique_values["E"] == data["E"].value_counts().to_dict()
