@@ -6,6 +6,7 @@ The results in a return statement are sent to the vantage6 server (after
 encryption if that is enabled).
 """
 
+import json
 from typing import Any
 import pandas as pd
 
@@ -99,7 +100,7 @@ def summary(
     return {
         "numeric": results["numeric"].to_json(),
         "categorical": results["categorical"].to_json(),
-        "counts_unique_values": results["counts_unique_values"].to_json(),
+        "counts_unique_values": json.dumps(results["counts_unique_values"]),
         "num_complete_rows_per_node": results["num_complete_rows_per_node"].to_json(),
     }
 
@@ -126,9 +127,6 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
             # we can add the other nodes to it later
             aggregated_summary["numeric"] = pd.DataFrame(result["numeric"])
             aggregated_summary["categorical"] = pd.DataFrame(result["categorical"])
-            aggregated_summary["counts_unique_values"] = pd.DataFrame(
-                result["counts_unique_values"]
-            )
             aggregated_summary["num_complete_rows_per_node"] = [
                 result["num_complete_rows_per_node"]
             ]
@@ -173,12 +171,9 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
             result["num_complete_rows_per_node"]
         )
 
-        # add the unique values
-        unique_values_result = pd.DataFrame(result["counts_unique_values"])
-        if not unique_values_result.empty:
-            aggregated_summary["counts_unique_values"] = aggregated_summary[
-                "counts_unique_values"
-            ].add(unique_values_result, fill_value=0)
+    aggregated_summary["counts_unique_values"] = _aggregate_counts_unique_values(
+        results, list(aggregated_summary["categorical"].columns)
+    )
 
     # now that all data is aggregated, we can compute the mean
     if not aggregated_summary["numeric"].empty:
@@ -193,6 +188,47 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
     )
 
     return aggregated_summary
+
+
+def _aggregate_counts_unique_values(
+    results: list[dict], categorical_columns: list[str]
+) -> dict[str, dict[str, int]]:
+    """Sum the counts of unique values of all nodes, per column.
+
+    A column is returned as an empty dict if any node did not share its counts,
+    because a value was below the privacy threshold or because the node's policies do
+    not allow sharing counts at all. Summing only the other nodes would give a
+    misleading total.
+
+    Parameters
+    ----------
+    results : list[dict]
+        The partial summaries of all nodes.
+    categorical_columns : list[str]
+        The categorical columns in the summary.
+
+    Returns
+    -------
+    dict[str, dict[str, int]]
+        Per column, the total count of each unique value.
+    """
+    totals = {column: {} for column in categorical_columns}
+    hidden_columns = set()
+    for result in results:
+        node_counts = result["counts_unique_values"]
+        if node_counts is None:
+            hidden_columns.update(categorical_columns)
+            continue
+        for column in categorical_columns:
+            column_counts = node_counts.get(column)
+            if not column_counts:
+                hidden_columns.add(column)
+                continue
+            for value, count in column_counts.items():
+                totals[column][value] = totals[column].get(value, 0) + int(count)
+    for column in hidden_columns:
+        totals[column] = {}
+    return totals
 
 
 def _add_sd_to_results(
